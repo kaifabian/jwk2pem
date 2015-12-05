@@ -1,72 +1,15 @@
 import argparse
 import base64
 import binascii
-import fractions
 import json
 import os
-import random
-import subprocess
-import sys
-import tempfile
 import textwrap
+import sys
 
 from pyasn1.type import univ, namedtype
 from pyasn1.codec.der import encoder as der_encoder
 
-# via: http://stackoverflow.com/questions/5486204/fast-modulo-calculations-in-python-and-ruby
-def modexp ( g, u, p ):
-    """computes s = (g ^ u) mod p
-        args are base, exponent, modulus
-        (see Bruce Schneier's book, _Applied Cryptography_ p. 244)"""
-    s = 1
-    while u != 0:
-        if u & 1:
-            s = (s * g)%p
-        u >>= 1
-        g = (g * g)%p;
-    return s
-
-
-# 2 functions via https://en.wikibooks.org/wiki/Algorithm_Implementation/Mathematics/Extended_Euclidean_algorithm
-def egcd(a, b):
-    if a == 0:
-        return (b, 0, 1)
-    else:
-        g, y, x = egcd(b % a, a)
-        return (g, x - (b // a) * y, y)
-
-
-def modinv(a, m):
-    g, x, y = egcd(a, m)
-    if g != 1:
-        raise Exception('modular inverse does not exist')
-    else:
-        return x % m
-
-
-# implemented after: http://www.di-mgt.com.au/rsa_factorize_n.html
-def factorRsa(n, e, d):
-    # rsa sanity check:
-    m = random.randint(0, n)
-    me = modexp(m, e, n)
-    md = modexp(me, d, n)
-    assert md == m, ValueError("Not a valid RSA key!")
-
-    k = d*e - 1
-    while True:
-        g = random.randint(2, n)
-        t = k
-        
-        while t % 2 == 0 and t > 0:
-            t = t//2
-            x = modexp(g, t, n)
-            y = fractions.gcd(x-1, n)
-            if x > 1 and y > 1:
-                p = y
-                q = n/y
-                return (p, q)
-            else:
-                print ".",
+from util.math import modexp, egcd, modinv, factorrsa
 
 
 def asn1sequence(*elems):
@@ -111,7 +54,7 @@ def jwkrsa2pem(j, type='PEM'):
         p = jbase2int(j["p"])
         q = jbase2int(j["q"])
     else:
-        p, q = factorRsa(n, e, d)
+        p, q = factorrsa(n, e, d)
     if "dp" in j and "dq" in j:
         dp = jbase2int(j["dp"])
         dq = jbase2int(j["dq"])
@@ -141,14 +84,14 @@ def jwkrsa2pem(j, type='PEM'):
         pem_tpl = """-----BEGIN RSA PRIVATE KEY-----
 {}
 -----END RSA PRIVATE KEY-----"""
-        return pem_tpl.format(pem_b64)
+        return pem_tpl.format(pem_b64).encode('ascii')
     elif type == 'DER':
         return inner
     else:
         raise ValueError("Output type can only be 'DER' or 'PEM'")
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description='Convert JWK private key to PEM or DER')
     parser.add_argument('-P', '--pem', dest='outform', action='store_const', const='PEM', default='PEM', help='Output in PEM format')
     parser.add_argument('-D', '--der', dest='outform', action='store_const', const='DER', help='Output in DER format')
@@ -164,7 +107,7 @@ if __name__ == "__main__":
             jwk_key = jwk_bytes.decode(args.encoding)
     except IOError:
         sys.stderr.write("ERROR: Cannot read file {}".format(args.infile))
-        sys.exit(1)
+        return 1
 
     out = jwkrsa2pem(jwk_key, type=args.outform)
 
@@ -172,4 +115,6 @@ if __name__ == "__main__":
         print(out)
     else:
         with open(args.outfile, "wb") as f:
-            f.write(out.encode('ascii'))
+            f.write(out)
+
+    return 0

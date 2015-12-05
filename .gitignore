@@ -1,0 +1,9 @@
+*.pyc
+*.pyo
+*.pem
+*.der
+*.crt
+*.key
+*.jwk
+*.json
+__pycache__/
